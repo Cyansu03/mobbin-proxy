@@ -238,15 +238,12 @@ app.get('/health', function(req, res) {
   res.json({ status: 'ok', hasCookie: !!global.mobbinCookie, sessions: Object.keys(sessions).length });
 });
 
-// 创建代理中间件 - 移到前面，让 /mob 路由最先处理
+// 创建代理中间件
 const mobProxy = createProxyMiddleware({
   target: CONFIG.TARGET_URL,
   changeOrigin: true,
   ws: true,
   followRedirects: true,
-  pathRewrite: {
-    '^/mob': '' // 去掉 /mob 前缀
-  },
   headers: {
     'X-Forwarded-Host': 'mobbin-proxy.onrender.com',
     'X-Forwarded-Proto': 'https'
@@ -264,13 +261,37 @@ const mobProxy = createProxyMiddleware({
   }
 });
 
-// /mob 路由放在最前面，跳过 session 检查
-app.use('/mob', mobProxy);
+// 我们的 API 和页面路由
+const appRoutes = ['/', '/api/login', '/dashboard', '/set-cookie', '/health', '/favicon.ico'];
 
-// 其他 404 路由
-app.use(function(req, res) {
-  console.log('404: ' + req.path);
-  res.status(404).send('页面不存在');
+// /mob 前缀的路由 - 检查 session 后代理
+app.use('/mob', function(req, res, next) {
+  const sessionId = req.sessionId;
+  if (!sessionId || !sessions[sessionId]) {
+    return res.redirect('/');
+  }
+  // 重写路径：去掉 /mob 前缀
+  req.url = req.path.substring(4) + (req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '');
+  console.log('🔄 /mob proxy to:', req.url);
+  mobProxy(req, res, next);
+});
+
+// 通配符：所有其他请求都代理到 mobbin.com
+app.use(function(req, res, next) {
+  // 如果是我们的应用路由，跳过
+  if (appRoutes.includes(req.path)) {
+    return next();
+  }
+
+  // 检查 session
+  const sessionId = req.sessionId;
+  if (!sessionId || !sessions[sessionId]) {
+    console.log('❌ No session for:', req.path);
+    return res.redirect('/');
+  }
+
+  console.log('🔄 Direct proxy:', req.url);
+  mobProxy(req, res, next);
 });
 
 // 启动服务
