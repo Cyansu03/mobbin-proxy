@@ -180,6 +180,7 @@ app.get('/dashboard', function(req, res) {
   <div class="info">
     <p>点击下方按钮访问 Mobbin：</p>
     <button onclick="openMobbin()">打开 Mobbin</button>
+    <p style="font-size: 12px; color: #666; margin-top: 10px;">提示：如果还是需要登录，请尝试刷新页面</p>
   </div>
 
   <div class="info">
@@ -202,7 +203,7 @@ app.get('/dashboard', function(req, res) {
     }
 
     function openMobbin() {
-      window.location.href = '/mob';
+      window.location.href = '/mob/search';
     }
 
     function logout() {
@@ -249,8 +250,8 @@ const proxy = createProxyMiddleware({
   },
   onProxyReq: function(proxyReq, req, res) {
     if (global.mobbinCookie) {
-      const existingCookie = proxyReq.getHeader('cookie') || '';
-      proxyReq.setHeader('cookie', global.mobbinCookie + (existingCookie ? '; ' + existingCookie : ''));
+      proxyReq.setHeader('cookie', global.mobbinCookie);
+      console.log('🍪 Setting Mobbin Cookie for:', req.url);
     }
     console.log('📡 Proxy: ' + req.method + ' ' + req.url);
   },
@@ -273,10 +274,14 @@ app.use(function(req, res, next) {
     return res.redirect('/');
   }
 
-  // 处理 /mob 开头的路径
+  // 处理 /mob 开头的路径 - 转发到 mobbin.com
   if (req.path.startsWith('/mob')) {
     const proxyPath = req.path.substring(4) || '/';
     req.url = proxyPath + (req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '');
+    console.log('🔄 Proxied to:', req.url);
+  } else {
+    // 其他路径也直接代理
+    console.log('🔄 Direct proxy:', req.path);
   }
 
   proxy(req, res, next);
